@@ -1,0 +1,90 @@
+[project]
+name = "APP_NAME"
+version = "2025.9.3"
+description = "CHANGE_ME"
+readme = "README.md"
+requires-python = ">=3.13"
+
+
+dependencies = [
+    "streamlit",
+    "telenor-sads-connectivity",
+    "sadsapi",
+    "sads-api-paths",
+    "sads-api-schemas",
+    "openpyxl",
+    "orjson",
+    "pandas[performance]>=2.2,<3",
+    "plotly",
+    "scipy",
+    "statsmodels",
+    "fastapi[standard]",
+    "google-cloud-logging",
+    "google-cloud-storage",
+    "google-cloud-bigquery[bqstorage]",
+    "google-cloud-firestore",
+    "db-dtypes",
+]
+
+[dependency-groups]
+dev = ["ruff", "pre-commit", "ipykernel"]
+
+
+[tool.uv]
+keyring-provider = "subprocess"
+
+[tool.uv.sources]
+"sadsapi" = { index = "sads" }
+"sads-api-paths" = { index = "sads" }
+"sads-api-schemas" = { index = "sads" }
+"telenor-sads-connectivity" = { index = "sads" }
+
+
+[[tool.uv.index]]
+name = "sads"
+url = "https://oauth2accesstoken@europe-west3-python.pkg.dev/spectrum-analytics-non-exposed/sads-python-packages/simple/"
+index-url = "https://oauth2accesstoken@europe-west3-python.pkg.dev/spectrum-analytics-non-exposed/sads-python-packages/simple/"
+explicit = true
+
+
+[tool.ruff]
+line-length = 120
+target-version = 'py313'
+
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle
+    "W",    # pycodestyle warnings
+    "F",    # Pyflakes
+    "I",    # isort
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "UP",   #pyupgrade    
+    "SIM",  # flake8-simplify
+    "PD",   # Pandas
+    "NPY",  # Numpy
+    "PERF", #  Perflint
+    "ARG",  # Unused arguments    
+    "DOC",  # Docstrings
+    "ANN",  # Annotations
+    "S",    # Security
+    "A",    # Built-ins shadowing
+    "N",    # Naming
+    "RUF",  # Ruff-specific
+    "SLF",  # Private attr access
+    "RET",  # Return logic
+    "FBT",  # Boolean trap
+    "PTH",  # Pathlib
+    "Q",    # Quotes
+    "PT",   # Pytest style
+    "TD",   # TODOs
+    "ERA",  # Commented-out code  
+]
+
+# In the future try to un-ignore some as the codebase improves
+ignore = [
+    "B008",  # do not perform function calls in argument defaults
+    "PD901",
+    "S608",  # Hardcoded SQL expression
+]
