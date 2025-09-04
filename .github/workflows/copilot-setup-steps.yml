@@ -1,0 +1,55 @@
+# FROM https://docs.github.com/en/copilot/customizing-copilot/customizing-the-development-environment-for-copilot-coding-agent#preinstalling-tools-or-dependencies-in-copilots-environment
+
+name: "Copilot Setup Steps"
+
+# Allow testing of the setup steps from your repository's "Actions" tab.
+on: workflow_dispatch
+
+# NOTE - on the org/repo level, some firewalls rules are added to open up access to the Google Artifact Registry.
+jobs:
+  # The job MUST be called `copilot-setup-steps` or it will not be picked up by Copilot.
+  copilot-setup-steps:
+    runs-on: ubuntu-latest
+
+    # Set the permissions to the lowest permissions possible needed for your steps.
+    # Copilot will be given its own token for its operations.
+    permissions:
+      # If you want to clone the repository as part of your setup steps, 
+      # for example to install dependencies, you'll need the `contents: read` permission. 
+      # If you don't clone the repository in your setup steps, Copilot will do this for you automatically after the steps complete.
+      contents: read
+      id-token: write  # Add "id-token" with the intended permissions
+
+  
+
+    # You can define any steps you want, and they will run before the agent starts.
+    # If you do not check out your code, Copilot will do this for you.
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - id: "auth"
+        name: Set up Google Cloud authentication
+        uses: 'google-github-actions/auth@v2'
+        with:
+            project_id: 'spectrum-analytics-non-exposed'
+            workload_identity_provider: 'projects/957847743964/locations/global/workloadIdentityPools/github-runners/providers/github-runners'
+            service_account: 'gh-copilot-sa@spectrum-analytics-non-exposed.iam.gserviceaccount.com'            
+            token_format: 'id_token'
+            # We need to generate an ID Token for CR access and it needs an audience
+            id_token_audience: 'https://beta.api.telenorsads.com'
+            id_token_include_email: true            
+            # Note: gha-*.json exported file added to git ignore to stop the agent committing this file
+      - name: Export ID token for subsequent Python steps
+        # Expose the OIDC ID token produced by the auth step as an env var accessible to Python (os.environ['SADS_API_ID_TOKEN'])
+        run: echo "SADS_API_ID_TOKEN=${{ steps.auth.outputs.id_token }}" >> $GITHUB_ENV
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Install the keyring tools project
+        run: uv tool install keyring --with keyrings.google-artifactregistry-auth
+
+      - name: Install the project
+        run: uv sync --all-extras --dev
+ 
