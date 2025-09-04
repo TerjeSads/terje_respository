@@ -2,57 +2,9 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
+import plotly.express as px
 import requests
 import streamlit as st
-from google.cloud import bigquery
-from sqlalchemy import TextClause, text
-
-from common.connectivity import bq_client, sql_engine
-
-# We need to use st.cache_data to cache the results of the queries
-# This, however, is automatically done on the API client library side
-# so we only need to do it for the  queries here
-
-
-@st.cache_data
-def example_sql_function(country_code: str) -> pd.DataFrame:
-    query: TextClause = text(
-        """SELECT
-            country_code, mnc, network_name_detailed
-        FROM
-            financial_forecast.mobile_network_detailed
-        WHERE country_code = :cc"""
-    )
-    try:
-        return pd.read_sql(
-            query,
-            con=sql_engine,
-            params={"cc": country_code},
-        )
-    except Exception as e:
-        st.error(f"An error occurred while querying the SQL database: {e}")
-        return pd.DataFrame()
-
-
-@st.cache_data
-def example_bigquery_function(country: str) -> pd.DataFrame:
-    query_string = """
-    SELECT topic, sub_topic, COUNT(*) AS counter
-    FROM `spectrum-analytics-secure.facebook_insights.dashboard_data`
-    WHERE
-        country = @country
-    GROUP BY ALL
-    """
-    try:
-        return bq_client.query_and_wait(
-            query_string,
-            job_config=bigquery.QueryJobConfig(
-                query_parameters=[bigquery.ScalarQueryParameter("country", "STRING", country)]
-            ),
-        ).to_dataframe()
-    except Exception as e:
-        st.error(f"An error occurred while querying BigQuery: {e}")
-        return pd.DataFrame()
 
 
 @st.cache_data
@@ -169,3 +121,91 @@ def get_ssb_consumer_price_data() -> pd.DataFrame:
         df[name] = index_values
 
     return df
+
+
+st.subheader("Consumer price developments in Norway")
+st.info("Data from Statistics Norway (SSB) - Consumer Price Index")
+
+# Create dropdown for selecting calculation method
+calculation_method = st.selectbox(
+    "Select calculation method:",
+    ["Month-to-month change in %", "Latest 12 month change in %"],
+    index=1,  # Default to 12-month change
+)
+
+# Get the data
+with st.spinner("Loading consumer price data..."):
+    df = get_ssb_consumer_price_data()
+
+if not df.empty:
+    # Filter based on selected calculation method
+    if calculation_method == "Month-to-month change in %":
+        # Calculate month-to-month changes
+        df_filtered = df.copy()
+        for col in df_filtered.columns:
+            if col != "period":
+                df_filtered[col] = df_filtered[col].pct_change() * 100
+        chart_title = "Monthly Consumer Price Changes in Norway (%)"
+        y_title = "Month-to-Month Change (%)"
+    else:
+        # Calculate 12-month changes
+        df_filtered = df.copy()
+        for col in df_filtered.columns:
+            if col != "period":
+                df_filtered[col] = df_filtered[col].pct_change(periods=12) * 100
+        chart_title = "Annual Consumer Price Changes in Norway (%)"
+        y_title = "12-Month Change (%)"
+
+    # Remove NaN values that result from percentage calculations
+    df_filtered = df_filtered.dropna()
+
+    if not df_filtered.empty:
+        # Melt the dataframe for plotly
+        df_melted = df_filtered.melt(id_vars=["period"], var_name="Category", value_name="Change_Percent")
+
+        # Create the chart
+        fig = px.line(
+            df_melted,
+            x="period",
+            y="Change_Percent",
+            color="Category",
+            title=chart_title,
+            labels={"period": "Month-Year", "Change_Percent": y_title, "Category": "Price Category"},
+        )
+
+        # Customize the chart
+        fig.update_layout(
+            width=800,
+            height=600,
+            xaxis_title="Month-Year",
+            yaxis_title=y_title,
+            legend_title="Price Categories",
+            hovermode="x unified",
+        )
+
+        # Add horizontal line at 0%
+        fig.add_hline(y=0, line_dash="dash", line_color="gray", opacity=0.5)
+
+        # Display the chart
+        st.plotly_chart(fig, use_container_width=True)
+
+        # Display summary statistics
+        with st.expander("Summary Statistics"):
+            st.subheader(f"Latest data ({df_filtered['period'].iloc[-1]})")
+            latest_data = df_filtered.iloc[-1].drop("period").sort_values(ascending=False)
+
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Highest inflation category", latest_data.index[0], f"{latest_data.iloc[0]:.2f}%")
+            with col2:
+                st.metric(
+                    "Total inflation",
+                    "Total",
+                    f"{latest_data.get('Total', 0):.2f}%" if "Total" in latest_data.index else "N/A",
+                )
+
+            st.dataframe(latest_data.to_frame(name="Rate (%)"), use_container_width=True)
+    else:
+        st.warning("No data available after applying the selected calculation method.")
+else:
+    st.error("Failed to load consumer price data. Please check your connection or try again later.")
