@@ -2,6 +2,7 @@ from datetime import datetime, timedelta
 
 import numpy as np
 import pandas as pd
+import pyjstat
 import requests
 import streamlit as st
 from google.cloud import bigquery
@@ -52,6 +53,54 @@ def example_bigquery_function(country: str) -> pd.DataFrame:
         ).to_dataframe()
     except Exception as e:
         st.error(f"An error occurred while querying BigQuery: {e}")
+        return pd.DataFrame()
+    
+@st.cache_data
+
+def fetch_ssb_cpi_and_subaggregates():
+    """
+    Fetches Consumer Price Index (CPI) and sub-aggregates from SSB Norway's API.
+    Returns a pandas DataFrame with the results.
+    """
+    # SSB API endpoint for CPI (table 03013)
+    url = "https://data.ssb.no/api/v0/no/table/03013/"
+    # Example query for all CPI and sub-aggregates
+    query = {
+  "query": [
+    {
+      "code": "Konsumgrp",
+      "selection": {
+        "filter": "vs:CoiCop2016niva1",
+        "values": [
+          "TOTAL"
+        ]
+      }
+    },
+    {
+      "code": "ContentsCode",
+      "selection": {
+        "filter": "item",
+        "values": [
+          "KpiIndMnd",
+          "Manedsendring",
+          "Tolvmanedersendring"
+        ]
+      }
+    }
+  ],
+  "response": {
+    "format": "json-stat2"
+  }
+}
+    try:
+        @st.cache_data()
+        resul = requests.post(url, json=query)
+        dataset = pyjstat.Dataset.read(resultat.text)
+        raw_df: pd.DataFrame = dataset.write("dataframe")
+        
+        return df
+    except Exception as e:
+        st.error(f"Failed to fetch CPI data from SSB: {e}")
         return pd.DataFrame()
 
 

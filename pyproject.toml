@@ -13,6 +13,7 @@ dependencies = [
     "sads-api-paths",
     "sads-api-schemas",
     "openpyxl",
+    "pyjstat",
     "orjson",
     "pandas[performance]>=2.2,<3",
     "plotly",
