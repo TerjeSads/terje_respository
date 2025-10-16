@@ -54,53 +54,15 @@ def example_bigquery_function(country: str) -> pd.DataFrame:
     except Exception as e:
         st.error(f"An error occurred while querying BigQuery: {e}")
         return pd.DataFrame()
-    
+# General BigQuery queries
+
 @st.cache_data
-
-def fetch_ssb_cpi_and_subaggregates():
-    """
-    Fetches Consumer Price Index (CPI) and sub-aggregates from SSB Norway's API.
-    Returns a pandas DataFrame with the results.
-    """
-    # SSB API endpoint for CPI (table 03013)
-    url = "https://data.ssb.no/api/v0/no/table/03013/"
-    # Example query for all CPI and sub-aggregates
-    query = {
-  "query": [
-    {
-      "code": "Konsumgrp",
-      "selection": {
-        "filter": "vs:CoiCop2016niva1",
-        "values": [
-          "TOTAL"
-        ]
-      }
-    },
-    {
-      "code": "ContentsCode",
-      "selection": {
-        "filter": "item",
-        "values": [
-          "KpiIndMnd",
-          "Manedsendring",
-          "Tolvmanedersendring"
-        ]
-      }
-    }
-  ],
-  "response": {
-    "format": "json-stat2"
-  }
-}
+def general_bigquery_query(qry_str: str) -> pd.DataFrame:
     try:
-        @st.cache_data()
-        resul = requests.post(url, json=query)
-        dataset = pyjstat.Dataset.read(resultat.text)
-        raw_df: pd.DataFrame = dataset.write("dataframe")
-        
-        return df
+        return bq_client.query_and_wait(
+            qry_str,
+            
+        ).to_dataframe()
     except Exception as e:
-        st.error(f"Failed to fetch CPI data from SSB: {e}")
+        st.error(f"An error occurred while querying BigQuery: {e}")
         return pd.DataFrame()
-
-
