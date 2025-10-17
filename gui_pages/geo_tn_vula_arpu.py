@@ -1,9 +1,62 @@
+
+# --- Imports ---
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import streamlit as st
-import numpy as np
 
 from common.data_queries import general_bigquery_query
+
+
+# --- Chart/UI Helper Functions ---
+def make_line_chart(df: pd.DataFrame, y_col: str, title: str, y_percent: bool = False) -> px.line:
+    fig = px.line(
+        df,
+        x="dt",
+        y=y_col,
+        title=title,
+        labels={y_col: y_col.replace("_", " ").title(), "PERIOD_YEAR_MONTH": "Period Year Month"},
+        height=600,
+    )
+    fig.update_layout(yaxis_title=y_col.replace("_", " ").title(), xaxis_title="Period Year Month")
+    if y_percent:
+        fig.update_yaxes(tickformat=".0%")
+    else:
+        fig.update_yaxes(tickformat=",.0f")
+    return fig
+
+def plot_in_columns(figs: list, columns: list):
+    for idx, fig in enumerate(figs):
+        columns[idx % len(columns)].plotly_chart(fig, use_container_width=True)
+
+# --- Helper Functions ---
+def aggregate_geo(df: pd.DataFrame, group_cols: list) -> pd.DataFrame:
+    agg_dict = {
+        "rev_recur_tn": "sum",
+        "rev_non_recur_tn": "sum",
+        "rev_recur_vula": "sum",
+        "rev_non_recur_vula": "sum",
+        "abo_antall_tn": "sum",
+        "abo_antall_vula": "sum",
+    }
+    grp = df.groupby(group_cols).agg(agg_dict).reset_index()
+    grp["arpu_per_abo_tn"] = np.where(
+        grp["abo_antall_tn"] == 0,
+        0,
+        (grp["rev_recur_tn"] + grp["rev_non_recur_tn"]) / grp["abo_antall_tn"],
+    )
+    grp["arpu_per_abo_vula"] = np.where(
+        grp["abo_antall_vula"] == 0,
+        0,
+        (grp["rev_recur_vula"] + grp["rev_non_recur_vula"]) / grp["abo_antall_vula"],
+    )
+    grp["total_subs"] = grp["abo_antall_tn"] + grp["abo_antall_vula"]
+    grp["vula_sub_share"] = np.where(
+        grp["total_subs"] == 0,
+        0,
+        grp["abo_antall_vula"] / grp["total_subs"],
+    )
+    return grp
 
 tn_arpu_query = """
 SELECT
@@ -75,51 +128,16 @@ with st.expander("TN and VULA ARPU and subs data", expanded=False):
   st.dataframe(tn_vula_arpu_df)
 
 
-county_grp = tn_vula_arpu_df.groupby(["COUNTY_ID", "COUNTY", "PERIOD_YEAR_MONTH"]).agg({"rev_recur_tn": "sum", "rev_non_recur_tn": "sum", "rev_recur_vula": "sum", "rev_non_recur_vula": "sum", "abo_antall_tn": "sum", "abo_antall_vula": "sum"}).reset_index()
-county_grp["arpu_per_abo_tn"] = np.where(
-  county_grp["abo_antall_tn"] == 0,
-  0,
-  (county_grp["rev_recur_tn"] + county_grp["rev_non_recur_tn"]) / county_grp["abo_antall_tn"]
-)
-county_grp["arpu_per_abo_vula"] = np.where(
-  county_grp["abo_antall_vula"] == 0,
-  0,
-  (county_grp["rev_recur_vula"] + county_grp["rev_non_recur_vula"]) / county_grp["abo_antall_vula"]
-)
-county_grp["total_subs"] = county_grp["abo_antall_tn"] + county_grp["abo_antall_vula"]
-county_grp["vula_sub_share"] = county_grp["abo_antall_vula"] / county_grp["total_subs"]
+
+county_grp = aggregate_geo(tn_vula_arpu_df, ["COUNTY_ID", "COUNTY", "PERIOD_YEAR_MONTH"])
 county_grp = county_grp.sort_values(by=["COUNTY_ID", "PERIOD_YEAR_MONTH"])
 county_grp["dt"] = pd.to_datetime(county_grp["PERIOD_YEAR_MONTH"].astype(str), format="%Y%m")
 
-municipal_grp = tn_vula_arpu_df.groupby(["MUNICIPAL_ID", "MUNICIPAL", "COUNTY_ID", "COUNTY", "PERIOD_YEAR_MONTH"]).agg({"rev_recur_tn": "sum", "rev_non_recur_tn": "sum", "rev_recur_vula": "sum", "rev_non_recur_vula": "sum", "abo_antall_tn": "sum", "abo_antall_vula": "sum"}).reset_index()
-municipal_grp["arpu_per_abo_tn"] = np.where(
-  municipal_grp["abo_antall_tn"] == 0,
-  0,
-  (municipal_grp["rev_recur_tn"] + municipal_grp["rev_non_recur_tn"]) / municipal_grp["abo_antall_tn"]
-)
-municipal_grp["arpu_per_abo_vula"] = np.where(
-  municipal_grp["abo_antall_vula"] == 0,
-  0,
-  (municipal_grp["rev_recur_vula"] + municipal_grp["rev_non_recur_vula"]) / municipal_grp["abo_antall_vula"]
-)
-municipal_grp["total_subs"] = municipal_grp["abo_antall_tn"] + municipal_grp["abo_antall_vula"]
-municipal_grp["vula_sub_share"] = municipal_grp["abo_antall_vula"] / municipal_grp["total_subs"]
+municipal_grp = aggregate_geo(tn_vula_arpu_df, ["MUNICIPAL_ID", "MUNICIPAL", "COUNTY_ID", "COUNTY", "PERIOD_YEAR_MONTH"])
 municipal_grp = municipal_grp.sort_values(by=["MUNICIPAL_ID", "PERIOD_YEAR_MONTH"])
 municipal_grp["dt"] = pd.to_datetime(municipal_grp["PERIOD_YEAR_MONTH"].astype(str), format="%Y%m")
 
-postcode_grp = tn_vula_arpu_df.groupby(["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL_ID", "MUNICIPAL", "COUNTY_ID", "COUNTY", "PERIOD_YEAR_MONTH"]).agg({"rev_recur_tn": "sum", "rev_non_recur_tn": "sum", "rev_recur_vula": "sum", "rev_non_recur_vula": "sum", "abo_antall_tn": "sum", "abo_antall_vula": "sum"}).reset_index()
-postcode_grp["arpu_per_abo_tn"] = np.where(
-  postcode_grp["abo_antall_tn"] == 0,
-  0,
-  (postcode_grp["rev_recur_tn"] + postcode_grp["rev_non_recur_tn"]) / postcode_grp["abo_antall_tn"]
-)
-postcode_grp["arpu_per_abo_vula"] = np.where(
-  postcode_grp["abo_antall_vula"] == 0,
-  0,
-  (postcode_grp["rev_recur_vula"] + postcode_grp["rev_non_recur_vula"]) / postcode_grp["abo_antall_vula"]
-)
-postcode_grp["total_subs"] = postcode_grp["abo_antall_tn"] + postcode_grp["abo_antall_vula"]
-postcode_grp["vula_sub_share"] = postcode_grp["abo_antall_vula"] / postcode_grp["total_subs"]
+postcode_grp = aggregate_geo(tn_vula_arpu_df, ["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL_ID", "MUNICIPAL", "COUNTY_ID", "COUNTY", "PERIOD_YEAR_MONTH"])
 postcode_grp = postcode_grp.sort_values(by=["POSTCODE_ID", "PERIOD_YEAR_MONTH"])
 postcode_grp["dt"] = pd.to_datetime(postcode_grp["PERIOD_YEAR_MONTH"].astype(str), format="%Y%m")
 
@@ -137,11 +155,13 @@ with col_a:
           legend = "COUNTY"
       case "Municipal":
           filtered_county = st.selectbox("Select county", county_list, index=0, key="municipal_county")
+          selected_subitem = filtered_county
           filtered_df = municipal_grp.copy()
           filtered_df = filtered_df[filtered_df["COUNTY"] == filtered_county]
           legend = "MUNICIPAL"
       case "Postcode":
           filtered_municipal = st.selectbox("Select municipal", municipal_list, index=0, key="postcode_municipal")
+          selected_subitem = filtered_municipal
           filtered_df = postcode_grp.copy()
           filtered_df = filtered_df[filtered_df["MUNICIPAL"] == filtered_municipal]
           filtered_df["ID_OFFICE"] = filtered_df["POSTCODE_ID"].astype(str) + " - " + filtered_df["POST_OFFICE"]
@@ -151,9 +171,14 @@ with col_a:
 with col_b:
     (arpu_min, arpu_max) = st.slider("Select ARPU range to display", min_value=0, max_value=2000, value=(1, 2000 if level == "County" else 700), step=50)
     month_year_filter = st.selectbox("Select month/year", options=list(filtered_df["PERIOD_YEAR_MONTH"].sort_values(ascending=False).unique()), index=0)
+    first_year_month_plot = st.selectbox("Select first year/month to plot from", options=list(filtered_df["PERIOD_YEAR_MONTH"].sort_values(ascending=False).unique()), index=18)
+    if first_year_month_plot >= month_year_filter:
+        st.warning("First year/month to plot from must be earlier than month/year filter. Resetting to earliest available.")
+        st.stop()
 
-tab_summary, tab_geo_type, tab_arpu_ranked = st.tabs(["Summary", "Geographical ARPU trends", "Ranked ARPU"])
+tab_summary, tab_geo_type, tab_arpu_ranked = st.tabs(["Summary", "Geographical trends", "Ranked ARPU"])
 with tab_summary:
+  st.header(f"Summary: {'Norway' if level == 'County' else selected_subitem}")
   summary_df = filtered_df.copy()
   summary_df_grp = summary_df.groupby(["PERIOD_YEAR_MONTH"]).agg({"abo_antall_tn": "sum", "rev_recur_tn": "sum", "rev_non_recur_tn": "sum", "abo_antall_vula": "sum", "rev_recur_vula": "sum", "rev_non_recur_vula": "sum"}).reset_index()
   summary_df_grp["total_subs"] = summary_df_grp["abo_antall_tn"] + summary_df_grp["abo_antall_vula"]
@@ -174,36 +199,22 @@ with tab_summary:
   )
   summary_df_grp["dt"] = pd.to_datetime(summary_df_grp["PERIOD_YEAR_MONTH"].astype(str), format="%Y%m")
 
-  col1, col2, col3 = st.columns(3)
-  chart_list = ["abo_antall_tn", "abo_antall_vula", "total_subs", "vula_sub_share", "arpu_per_abo_tn", "arpu_per_abo_vula"]
-  for idx, p in enumerate(chart_list):
-    fig = px.line(
-      summary_df_grp,
-      x="dt",
-      y=p,
-      title=f"{p} over time",
-      labels={p: p.replace("_", " ").title(), "PERIOD_YEAR_MONTH": "Period Year Month"},
-      height=600
-    )
-    fig.update_layout(yaxis_title=p.replace("_", " ").title(), xaxis_title="Period Year Month")
-    if p == "vula_sub_share":
-      fig.update_yaxes(tickformat=".0%")
-    else:
-      fig.update_yaxes(tickformat=",.0f")
-    # Alternate charts between three columns
-    if idx % 3 == 0:
-      col1.plotly_chart(fig, use_container_width=True)
-    elif idx % 3 == 1:
-      col2.plotly_chart(fig, use_container_width=True)
-    else:
-      col3.plotly_chart(fig, use_container_width=True)
+  chart_list = [
+      ("abo_antall_tn", False),
+      ("abo_antall_vula", False),
+      ("total_subs", False),
+      ("vula_sub_share", True),
+      ("arpu_per_abo_tn", False),
+      ("arpu_per_abo_vula", False)
+  ]
+  cols = st.columns(3)
+  figs = [make_line_chart(summary_df_grp, p, f"{p} over time", y_percent=percent) for p, percent in chart_list]
+  plot_in_columns(figs, cols)
   with st.expander("See data used in plots", expanded=False):
-    st.dataframe(summary_df_grp.style.format(subset=summary_df_grp.columns[1:-1], formatter="{:,.0f}").format(subset=["vula_sub_share"], formatter="{:.1%}"), use_container_width=True)
-  
+    st.dataframe(summary_df_grp.style.format(subset=summary_df_grp.columns[1:-1], formatter="{:,.0f}").format(subset=["vula_sub_share"], formatter="{:.1%}"), use_container_width=True)  
 with tab_geo_type:
+  st.header("Geographical ARPU and subscriber trends")
   col_11, col_12 = st.columns(2)
-  # make PLOT with plotly express with x=dt, y=arpu_per_abo_tn and arpu_per_abo_vula, legend is COUNTY, MUNICIPAL or POST_OFFICE depending on level selected.
-  # If level = Postcode the legend is POST_OFFICE and POSTCODE_ID
   with col_11:
     fig = px.line(filtered_df, x="dt", y=["arpu_per_abo_tn"], color=legend, markers=True, title=f"ARPU TN - {level} level", labels={"value": "ARPU", "dt": "Date", "variable": "Type"}, height=1000)
     fig.update_layout(yaxis_title="ARPU", xaxis_title="Date", legend_title=legend)
@@ -224,80 +235,80 @@ with tab_geo_type:
     st.dataframe(filtered_df)
 
 
+def plot_ranked_arpu_and_subs(grouped_df: pd.DataFrame, level: str) -> None:
+  match level:
+        case "County":
+            index_list = ["COUNTY_ID", "COUNTY"]
+        case "Municipal":
+            index_list = ["MUNICIPAL_ID", "MUNICIPAL", "COUNTY"]
+        case "Postcode":
+            index_list = ["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"]
+  filtered_df = grouped_df.copy()
+  filtered_df = filtered_df[filtered_df["PERIOD_YEAR_MONTH"] >= first_year_month_plot]
+  if filtered_df.empty:
+        st.warning("No data available for the selected first year/month to plot from.")
+  filtered_arpu_pivot = filtered_df.pivot_table(
+    index=index_list,
+    columns=["PERIOD_YEAR_MONTH"],
+    values="arpu_per_abo_tn",
+    aggfunc="sum",
+    fill_value=0,
+  ).reset_index()
+  # order pivot based on arpu in selected Period_YEAR_MONTH
+  filtered_arpu_pivot = filtered_arpu_pivot[
+    filtered_arpu_pivot[month_year_filter].between(arpu_min, arpu_max)
+  ]
+  filtered_arpu_pivot = filtered_arpu_pivot.sort_values(by=month_year_filter, ascending=True)
+  filter_tn_subs_pivot = filtered_df.pivot_table(
+    index=index_list,
+    columns=["PERIOD_YEAR_MONTH"],
+    values="abo_antall_tn",
+    aggfunc="sum",
+    fill_value=0,
+  ).reset_index()
+  # sort filter_tn_subs_pivot based on index in filtered_arpu_pivot
+  filter_tn_subs_pivot = filter_tn_subs_pivot.set_index(index_list).reindex(
+    filtered_arpu_pivot.set_index(index_list).index
+  ).reset_index()
+  filter_vula_subs_pivot = filtered_df.pivot_table(
+    index=index_list,
+    columns=["PERIOD_YEAR_MONTH"],
+    values="abo_antall_vula",
+    aggfunc="sum",
+    fill_value=0,
+  ).reset_index()
+  filter_vula_subs_pivot = filter_vula_subs_pivot.set_index(index_list).reindex(
+    filtered_arpu_pivot.set_index(index_list).index
+  ).reset_index()
+  filter_vula_sub_share_pivot = filtered_df.pivot_table(
+    index=index_list,
+    columns=["PERIOD_YEAR_MONTH"],
+    values="vula_sub_share",
+    aggfunc="sum",
+    fill_value=0,
+  ).reset_index()
+  filter_vula_sub_share_pivot = filter_vula_sub_share_pivot.set_index(index_list).reindex(
+    filtered_arpu_pivot.set_index(index_list).index
+  ).reset_index()
+
+  height = 35 * (len(filtered_arpu_pivot) + 1)
+  st.header("ARPU TN")
+  st.dataframe(filtered_arpu_pivot.style.format(subset=filtered_arpu_pivot.columns[3:], formatter="{:.0f}"), use_container_width=True, height=height)
+  st.header("Number of TN subs")
+  st.dataframe(filter_tn_subs_pivot.style.format(subset=filter_tn_subs_pivot.columns[3:], formatter="{:,.0f}"), use_container_width=True, height=height)
+  st.header("Number of VULA subs")
+  st.dataframe(filter_vula_subs_pivot.style.format(subset=filter_vula_subs_pivot.columns[3:], formatter="{:,.0f}"), use_container_width=True, height=height)
+  st.header("VULA subs share of total subs")
+  st.dataframe(filter_vula_sub_share_pivot.style.format(subset=filter_vula_sub_share_pivot.columns[3:], formatter="{:.1%}"), use_container_width=True, height=height)
+
 with tab_arpu_ranked:
-    match level:
+  st.header("ARPU and subscribes (Telenor retail and Vula) - ranked based on selected month/year and ARPU range")
+  match level:
       case "County":
-          filtered_df = county_grp.copy()
-          
-          filtered_arpu_pivot = filtered_df.pivot_table(index=["COUNTY_ID", "COUNTY"], columns=["PERIOD_YEAR_MONTH"], values="arpu_per_abo_tn", aggfunc="sum", fill_value=0).reset_index()
-          # order pivot based on arpu in selected Period_YEAR_MONTH
-          filtered_arpu_pivot = filtered_arpu_pivot[filtered_arpu_pivot[month_year_filter].between(arpu_min, arpu_max)]
-          filtered_arpu_pivot = filtered_arpu_pivot.sort_values(by=month_year_filter, ascending=True)
-          filter_tn_subs_pivot = filtered_df.pivot_table(index=["COUNTY_ID", "COUNTY"], columns=["PERIOD_YEAR_MONTH"], values="abo_antall_tn", aggfunc="sum", fill_value=0).reset_index()
-          # sort filter_tn_subs_pivot based on index in filtered_arpu_pivot
-          filter_tn_subs_pivot = filter_tn_subs_pivot.set_index(["COUNTY_ID", "COUNTY"]).reindex(filtered_arpu_pivot.set_index(["COUNTY_ID", "COUNTY"]).index).reset_index()          
-          filter_vula_subs_pivot = filtered_df.pivot_table(index=["COUNTY_ID", "COUNTY"], columns=["PERIOD_YEAR_MONTH"], values="abo_antall_vula", aggfunc="sum", fill_value=0).reset_index()
-          filter_vula_subs_pivot = filter_vula_subs_pivot.set_index(["COUNTY_ID", "COUNTY"]).reindex(filtered_arpu_pivot.set_index(["COUNTY_ID", "COUNTY"]).index).reset_index()
-          st.dataframe(filter_vula_subs_pivot)
-          filter_vula_sub_share_pivot = filtered_df.pivot_table(index=["COUNTY_ID", "COUNTY"], columns=["PERIOD_YEAR_MONTH"], values="vula_sub_share", aggfunc="sum", fill_value=0).reset_index()
-          filter_vula_sub_share_pivot = filter_vula_sub_share_pivot.set_index(["COUNTY_ID", "COUNTY"]).reindex(filtered_arpu_pivot.set_index(["COUNTY_ID", "COUNTY"]).index).reset_index()
-
-          # plot both dataframes in col_11 and col_12 respectively
-          height = 35 * (len(filtered_arpu_pivot) + 1)
-          st.header("ARPU TN")
-          st.dataframe(filtered_arpu_pivot.style.format(subset=filtered_arpu_pivot.columns[2:], formatter="{:.0f}"), use_container_width=True, height=height)
-          st.header("Number of TN subs")
-          st.dataframe(filter_tn_subs_pivot.style.format(subset=filter_tn_subs_pivot.columns[2:], formatter="{:,.0f}"), use_container_width=True, height=height)
-          st.header("Number of VULA subs")
-          st.dataframe(filter_vula_subs_pivot.style.format(subset=filter_vula_subs_pivot.columns[2:], formatter="{:,.0f}"), use_container_width=True, height=height)
-          st.header("VULA subs share of total subs")
-          st.dataframe(filter_vula_sub_share_pivot.style.format(subset=filter_vula_sub_share_pivot.columns[2:], formatter="{:.1%}"), use_container_width=True, height=height)
+          plot_ranked_arpu_and_subs(county_grp.copy(), level="County")
       case "Municipal":
-          filtered_df = municipal_grp.copy()
-          filtered_arpu_pivot = filtered_df.pivot_table(index=["MUNICIPAL_ID", "MUNICIPAL"], columns=["PERIOD_YEAR_MONTH"], values="arpu_per_abo_tn", aggfunc="sum", fill_value=0).reset_index()
-          # order pivot based on arpu in selected Period_YEAR_MONTH
-          filtered_arpu_pivot = filtered_arpu_pivot[filtered_arpu_pivot[month_year_filter].between(arpu_min, arpu_max)]
-          filtered_arpu_pivot = filtered_arpu_pivot.sort_values(by=month_year_filter, ascending=True)
-          filter_tn_subs_pivot = filtered_df.pivot_table(index=["MUNICIPAL_ID", "MUNICIPAL"], columns=["PERIOD_YEAR_MONTH"], values="abo_antall_tn", aggfunc="sum", fill_value=0).reset_index()
-          # sort filter_tn_subs_pivot based on index in filtered_arpu_pivot
-          filter_tn_subs_pivot = filter_tn_subs_pivot.set_index(["MUNICIPAL_ID", "MUNICIPAL"]).reindex(filtered_arpu_pivot.set_index(["MUNICIPAL_ID", "MUNICIPAL"]).index).reset_index()
-          filter_vula_subs_pivot = filtered_df.pivot_table(index=["MUNICIPAL_ID", "MUNICIPAL"], columns=["PERIOD_YEAR_MONTH"], values="abo_antall_vula", aggfunc="sum", fill_value=0).reset_index()
-          filter_vula_subs_pivot = filter_vula_subs_pivot.set_index(["MUNICIPAL_ID", "MUNICIPAL"]).reindex(filtered_arpu_pivot.set_index(["MUNICIPAL_ID", "MUNICIPAL"]).index).reset_index()
-          filter_vula_sub_share_pivot = filtered_df.pivot_table(index=["MUNICIPAL_ID", "MUNICIPAL"], columns=["PERIOD_YEAR_MONTH"], values="vula_sub_share", aggfunc="sum", fill_value=0).reset_index()
-          filter_vula_sub_share_pivot = filter_vula_sub_share_pivot.set_index(["MUNICIPAL_ID", "MUNICIPAL"]).reindex(filtered_arpu_pivot.set_index(["MUNICIPAL_ID", "MUNICIPAL"]).index).reset_index()
-          # plot both dataframes in col_11 and col_12 respectively
-          height = 35 * (len(filtered_arpu_pivot) + 1)
-          st.header("ARPU TN")
-          st.dataframe(filtered_arpu_pivot.style.format(subset=filtered_arpu_pivot.columns[2:], formatter="{:.0f}"), use_container_width=True, height=height)
-          st.header("Number of TN subs")
-          st.dataframe(filter_tn_subs_pivot.style.format(subset=filter_tn_subs_pivot.columns[2:], formatter="{:,.0f}"), use_container_width=True, height=height)
-          st.header("Number of VULA subs")
-          st.dataframe(filter_vula_subs_pivot.style.format(subset=filter_vula_subs_pivot.columns[2:], formatter="{:,.0f}"), use_container_width=True, height=height)
-          st.header("VULA subs share of total subs")
-          st.dataframe(filter_vula_sub_share_pivot.style.format(subset=filter_vula_sub_share_pivot.columns[2:], formatter="{:.1%}"), use_container_width=True, height=height)
+          plot_ranked_arpu_and_subs(municipal_grp.copy(), level="Municipal")
       case "Postcode":
-          filtered_df = postcode_grp.copy()
-          filtered_arpu_pivot = filtered_df.pivot_table(index=["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"], columns=["PERIOD_YEAR_MONTH"], values="arpu_per_abo_tn", aggfunc="sum", fill_value=0).reset_index()
-          # order pivot based on arpu in selected Period_YEAR_MONTH
-          filtered_arpu_pivot = filtered_arpu_pivot[filtered_arpu_pivot[month_year_filter].between(arpu_min, arpu_max)]
-          filtered_arpu_pivot = filtered_arpu_pivot.sort_values(by=month_year_filter, ascending=True)
-          filter_tn_subs_pivot = filtered_df.pivot_table(index=["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"], columns=["PERIOD_YEAR_MONTH"], values="abo_antall_tn", aggfunc="sum", fill_value=0).reset_index()
-          # sort filter_tn_subs_pivot based on index in filtered_arpu_pivot
-          filter_tn_subs_pivot = filter_tn_subs_pivot.set_index(["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"]).reindex(filtered_arpu_pivot.set_index(["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"]).index).reset_index()
-          filter_vula_subs_pivot = filtered_df.pivot_table(index=["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"], columns=["PERIOD_YEAR_MONTH"], values="abo_antall_vula", aggfunc="sum", fill_value=0).reset_index()
-          filter_vula_subs_pivot = filter_vula_subs_pivot.set_index(["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"]).reindex(filtered_arpu_pivot.set_index(["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"]).index).reset_index()
-          filter_vula_sub_share_pivot = filtered_df.pivot_table(index=["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"], columns=["PERIOD_YEAR_MONTH"], values="vula_sub_share", aggfunc="sum", fill_value=0).reset_index()
-          filter_vula_sub_share_pivot = filter_vula_sub_share_pivot.set_index(["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"]).reindex(filtered_arpu_pivot.set_index(["POSTCODE_ID", "POST_OFFICE", "MUNICIPAL"]).index).reset_index()
-          # plot both dataframes in col_11 and col_12 respectively
-          height = 35 * (len(filtered_arpu_pivot) + 1)
-          st.header("ARPU TN")
-          st.dataframe(filtered_arpu_pivot.style.format(subset=filtered_arpu_pivot.columns[3:], formatter="{:.0f}"), use_container_width=True, height=height)
-          st.header("Number of TN subs")
-          st.dataframe(filter_tn_subs_pivot.style.format(subset=filter_tn_subs_pivot.columns[3:], formatter="{:,.0f}"), use_container_width=True, height=height)
-          st.header("Number of VULA subs")
-          st.dataframe(filter_vula_subs_pivot.style.format(subset=filter_vula_subs_pivot.columns[3:], formatter="{:,.0f}"), use_container_width=True, height=height)
-          st.header("VULA subs share of total subs")
-          st.dataframe(filter_vula_sub_share_pivot.style.format(subset=filter_vula_sub_share_pivot.columns[3:], formatter="{:.1%}"), use_container_width=True, height=height)
-
+        plot_ranked_arpu_and_subs(postcode_grp.copy(), level="Postcode")
       case _:
           st.warning("Please select a level to display ranked ARPU.")
