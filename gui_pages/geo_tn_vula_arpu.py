@@ -171,10 +171,12 @@ with col_a:
 with col_b:
     (arpu_min, arpu_max) = st.slider("Select ARPU range to display", min_value=0, max_value=2000, value=(1, 2000 if level == "County" else 700), step=50)
     month_year_filter = st.selectbox("Select month/year", options=list(filtered_df["PERIOD_YEAR_MONTH"].sort_values(ascending=False).unique()), index=0)
-    first_year_month_plot = st.selectbox("Select first year/month to plot from", options=list(filtered_df["PERIOD_YEAR_MONTH"].sort_values(ascending=False).unique()), index=18)
+    first_year_month_plot = st.selectbox("Select first year/month to plot from", options=list(filtered_df["PERIOD_YEAR_MONTH"].sort_values(ascending=False).unique()), index=24)
     if first_year_month_plot >= month_year_filter:
         st.warning("First year/month to plot from must be earlier than month/year filter. Resetting to earliest available.")
         st.stop()
+
+filtered_df = filtered_df[filtered_df["PERIOD_YEAR_MONTH"] >= first_year_month_plot]
 
 tab_summary, tab_geo_type, tab_arpu_ranked = st.tabs(["Summary", "Geographical trends", "Ranked ARPU"])
 with tab_summary:
@@ -231,6 +233,12 @@ with tab_geo_type:
     fig4 = px.line(filtered_df, x="dt", y=["abo_antall_vula"], color=legend, markers=True, title=f"Number of VULA subs - {level} level", labels={"value": "Number of subs", "dt": "Date", "variable": "Type"}, height=1000)
     fig4.update_layout(yaxis_title="Number of VULA subs", xaxis_title="Date", legend_title=legend)
     st.plotly_chart(fig4, use_container_width=True)
+# add chart with vula subs share
+  with col_11:
+    fig5 = px.line(filtered_df, x="dt", y=["vula_sub_share"], color=legend, markers=True, title=f"VULA subs share of total subs - {level} level", labels={"value": "VULA subs share", "dt": "Date", "variable": "Type"}, height=1000)
+    fig5.update_layout(yaxis_title="VULA subs share", xaxis_title="Date", legend_title=legend)
+    fig5.update_yaxes(tickformat=".0%")
+    st.plotly_chart(fig5, use_container_width=True)
   with st.expander("See data used in plots", expanded=False):
     st.dataframe(filtered_df)
 
