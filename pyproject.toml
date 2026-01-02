@@ -9,7 +9,7 @@ requires-python = ">=3.13"
 dependencies = [
     "streamlit",
     "telenor-sads-connectivity",
-    "sadsapi",
+    "sadsapi==25.12.2",
     "sads-api-paths",
     "sads-api-schemas",
     "openpyxl",

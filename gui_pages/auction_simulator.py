@@ -1,6 +1,6 @@
 
-import streamlit as st
 import pandas as pd
+import streamlit as st
 
 st.title("Auction Simulator")
 
@@ -21,14 +21,14 @@ e_delta = -0.03
 
 # minimum number of blocks won
 st.header("Minimum Blocks Won Requirement")
-min_blocks_won_a = st.number_input("Minimum Number of Blocks Won bidder 1", min_value=0, value=1, key='a')
-min_blocks_won_b = st.number_input("Minimum Number of Blocks Won bidder 2", min_value=0, value=1, key='b')
-min_blocks_won_c = st.number_input("Minimum Number of Blocks Won bidder 3", min_value=0, value=1, key='c')
-min_blocks_won_d = st.number_input("Minimum Number of Blocks Won bidder 4", min_value=0, value=1, key='d')
-min_blocks_won_e = st.number_input("Minimum Number of Blocks Won bidder 5", min_value=0, value=1, key='e')
+min_blocks_won_a = st.number_input("Minimum Number of Blocks Won bidder 1", min_value=0, value=1, key="a")
+min_blocks_won_b = st.number_input("Minimum Number of Blocks Won bidder 2", min_value=0, value=1, key="b")
+min_blocks_won_c = st.number_input("Minimum Number of Blocks Won bidder 3", min_value=0, value=1, key="c")
+min_blocks_won_d = st.number_input("Minimum Number of Blocks Won bidder 4", min_value=0, value=1, key="d")
+min_blocks_won_e = st.number_input("Minimum Number of Blocks Won bidder 5", min_value=0, value=1, key="e")
 minimum_blocks_won_df = pd.DataFrame({
-    'bidder_id': ['a', 'b', 'c', 'd', 'e'],
-    'min_blocks_won': [min_blocks_won_a, min_blocks_won_b, min_blocks_won_c, min_blocks_won_d, min_blocks_won_e]
+    "bidder_id": ["a", "b", "c", "d", "e"],
+    "min_blocks_won": [min_blocks_won_a, min_blocks_won_b, min_blocks_won_c, min_blocks_won_d, min_blocks_won_e]
 })
 
 def_bids_a = [10, 20, 30, 40, 50]
@@ -104,8 +104,8 @@ all_bids = {"a1": a1, "a2": a2, "a3": a3, "a4": a4, "a5": a5,
             "e1": e1, "e2": e2, "e3": e3, "e4": e4, "e5": e5
 }
 
-all_bids_df = pd.DataFrame(list(all_bids.items()), columns=['Bidder_Item', 'Bid_Amount'])
-ranked_bids = all_bids_df.sort_values(by='Bid_Amount', ascending=False).reset_index(drop=True)
+all_bids_df = pd.DataFrame(list(all_bids.items()), columns=["Bidder_Item", "Bid_Amount"])
+ranked_bids = all_bids_df.sort_values(by="Bid_Amount", ascending=False).reset_index(drop=True)
 st.header("All Bids")
 st.dataframe(all_bids)
 st.write("The bids are ranked from highest to lowest.")
@@ -115,7 +115,7 @@ price = ranked_bids.iloc[supply+1]["Bid_Amount"]
 winners = ranked_bids[ranked_bids.index < (supply)]
 winners["bidder_id"] = winners["Bidder_Item"].str[0]
 winners["item_id"] = winners["Bidder_Item"].str[1]
-winner_allocation = winners.groupby("bidder_id").size().reset_index(name='num_items_won_pre_min_check')
+winner_allocation = winners.groupby("bidder_id").size().reset_index(name="num_items_won_pre_min_check")
 winner_allocation["unit_price"] = price
 winner_allocation = winner_allocation.merge(minimum_blocks_won_df, on="bidder_id", how="left")
 winner_allocation["meets_min_blocks_won"] = winner_allocation["num_items_won_pre_min_check"] >= winner_allocation["min_blocks_won"]

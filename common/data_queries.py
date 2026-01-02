@@ -1,9 +1,5 @@
-from datetime import datetime, timedelta
 
-import numpy as np
 import pandas as pd
-import pyjstat
-import requests
 import streamlit as st
 from google.cloud import bigquery
 from sqlalchemy import TextClause, text
@@ -61,7 +57,6 @@ def general_bigquery_query(qry_str: str) -> pd.DataFrame:
     try:
         return bq_client.query_and_wait(
             qry_str,
-            
         ).to_dataframe()
     except Exception as e:
         st.error(f"An error occurred while querying BigQuery: {e}")

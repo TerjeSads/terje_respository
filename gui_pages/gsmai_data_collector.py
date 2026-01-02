@@ -187,12 +187,11 @@ def spend_annual_fee_creator(metric, financial_measure, start_year, end_year, ke
             if df_oper_plot.empty:
                 st.markdown("<span style='color:red'> No data </span>", unsafe_allow_html=True)
                 continue
-            else:
-                st.dataframe(
-                    df_oper_plot.style.format("{:,.0f}"),
-                    height=35 * len(df_oper_plot) + 38,
-                    use_container_width=True,
-                )
+            st.dataframe(
+                df_oper_plot.style.format("{:,.0f}"),
+                height=35 * len(df_oper_plot) + 38,
+                use_container_width=True,
+            )
 
     per_mhz_table = spend_forecast_table.copy()
 
