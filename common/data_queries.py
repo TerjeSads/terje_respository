@@ -1,4 +1,3 @@
-
 import pandas as pd
 import streamlit as st
 from google.cloud import bigquery
@@ -50,7 +49,10 @@ def example_bigquery_function(country: str) -> pd.DataFrame:
     except Exception as e:
         st.error(f"An error occurred while querying BigQuery: {e}")
         return pd.DataFrame()
+
+
 # General BigQuery queries
+
 
 @st.cache_data
 def general_bigquery_query(qry_str: str) -> pd.DataFrame:
